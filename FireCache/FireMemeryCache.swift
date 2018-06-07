@@ -14,6 +14,24 @@ public class FireMemeryCache<Element>: FireCachable {
 
     let coreMap = LinkedNodeMap<T>(k: 1)
 
+    var historyQueueLength: Int64 = Int64(1e5) {
+        didSet {
+            coreMap.flushToHistoryCountLimit(historyQueueLength)
+        }
+    }
+
+    var countCapacity: Int64 = Int64.max {
+        didSet {
+            coreMap.flushToCountLimit(countCapacity)
+        }
+    }
+
+    var costCapacity: Int64 = Int64.max {
+        didSet {
+            coreMap.flushToCostLimit(costCapacity)
+        }
+    }
+
     func get(for key: String) -> Element? {
         objc_sync_enter(self)
         defer {
@@ -27,17 +45,20 @@ public class FireMemeryCache<Element>: FireCachable {
     }
 
     func put(_ value: Element?, key: String, cost: Int64 = 0) {
-        objc_sync_enter(self)
-        defer {
-            objc_sync_exit(self)
-        }
-        if let value = value {
-            coreMap.put(value, key: key, cost: cost)
+        lockedWork {
+            if let value = value {
+                coreMap.put(value, key: key, cost: cost)
+                coreMap.flushToHistoryCountLimit(historyQueueLength)
+                coreMap.flushToCostLimit(costCapacity)
+                coreMap.flushToCountLimit(countCapacity)
+            }
         }
     }
 
     func clear() {
-
+        lockedWork {
+            coreMap.removeAll()
+        }
     }
 }
 
@@ -47,5 +68,13 @@ extension FireMemeryCache {
         get {
             return get(for: key)
         }
+    }
+
+    func lockedWork(_ work:() -> ()) {
+        objc_sync_enter(self)
+        defer {
+            objc_sync_exit(self)
+        }
+        work()
     }
 }

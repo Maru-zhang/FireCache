@@ -25,7 +25,7 @@ class FireCacheTests: QuickSpec {
                     context("when count capacity only one", {
                         it("get nil value", closure: {
                             let cache = FireMemeryCache<Int>()
-                            cache.coreMap.countCapacity = 1
+                            cache.countCapacity = 1
                             cache.put(100, key: "foo")
                             cache.put(200, key: "bar")
                             expect(cache.get(for: "foo")).to(beNil())

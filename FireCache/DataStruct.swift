@@ -48,37 +48,48 @@ public class LinkedNodeMap<T> {
 
     private var map = [String: LinkNode<T>]()
     private let k: Int8
+
     private var totailCost: Int64 = 0
     private var totailCount: Int64 = 0
-
-    var costCapacity: Int64 = Int64.max
-    var countCapacity: Int64 = Int64.max
+    private var totailHistoryCount: Int64 = 0
 
     init(k: Int8 = 1) {
         self.k = k;
     }
 
-    var needAdjust: Bool {
-        return (totailCost > costCapacity) || (totailCount > countCapacity)
-    }
-
     func put(_ value: T, key: String, cost: Int64 = 0) {
-        if (k > 1) { return }
+        if (k > 1) {
+            if let oldNode = map[key] {
+                if oldNode.count >= k {
+                    // on the cached queue
+                    bringToHead(for: oldNode)
+                    oldNode.value = value
+                } else {
+                    // on the history queue
+                    oldNode.count += 1
+                    oldNode.value = value
+                    if (oldNode.count >= k) {
+                        // move from history queue to cached queue
+                        let preNode = oldNode.parent
+                        let nextNode = oldNode.next
+                        preNode?.next = nextNode
+                        oldNode.next = head
+                        head = oldNode
+                    }
+                }
+                map[key] = oldNode
+            } else {
+                let node = LinkNode<T>(parent: nil, next: historyHead, key: key, value: value)
+                historyHead = node
+                if (historyTail == nil) {
+                    historyTail = node
+                }
+                map[key] = node
+            }
+            return
+        }
         // move node to head of queue
         if let oldNode = map[key] {
-            if (oldNode.count <= k) {
-                // on the history queue
-                oldNode.count += 1
-                if (oldNode.count > k) {
-                    let preNode = oldNode.parent
-                    let nextNode = oldNode.next
-                    preNode?.next = nextNode
-                    oldNode.next = head
-                    head = oldNode
-                }
-            } else {
-                // on the cache queue
-            }
             bringToHead(for: oldNode)
             oldNode.value = value
         } else {
@@ -90,7 +101,6 @@ public class LinkedNodeMap<T> {
         // increase cost and count ...
         totailCount += 1
         totailCost += cost
-        if (needAdjust) { adjustForLimit() }
     }
 
     func get(for key: String) -> T? {
@@ -98,10 +108,10 @@ public class LinkedNodeMap<T> {
     }
 
     @discardableResult
-    func popTail() -> LinkNode<T>? {
+    func removeTail() -> LinkNode<T>? {
         let popedNode = tail
         if let node = popedNode {
-            let preNode = tail?.parent
+            let preNode = node.parent
             preNode?.next = nil
             tail = preNode
             totailCount -= 1
@@ -111,14 +121,43 @@ public class LinkedNodeMap<T> {
         return popedNode
     }
 
+    @discardableResult
+    func removeHistoryTail() -> LinkNode<T>? {
+        guard k > 1 else { return nil }
+        let popedNode = historyTail
+        if let node = popedNode {
+            let preNode = node.parent
+            preNode?.next = nil
+            historyTail = preNode
+            totailCount -= 1
+            map.removeValue(forKey: node.key)
+        }
+        return popedNode
+    }
+
+    func removeAll() {
+        historyHead = nil
+        historyTail = nil
+        head = nil
+        tail = nil
+        map.removeAll()
+    }
+
     func updateTail() {
-        /// if we loop up from head, it will loop up the whole linkmap,
-        /// but if we loop up from other node, the performence will be
-        /// better.
         var loopNode = head
         while let node = loopNode {
             if (node.next == nil) {
                 tail = node
+            }
+            loopNode = node.next
+        }
+    }
+
+    func updateHistoryTail() {
+        var loopNode = historyHead
+        while let node = loopNode {
+            if (node.next == nil) {
+                historyTail = node
             }
             loopNode = node.next
         }
@@ -133,17 +172,33 @@ public class LinkedNodeMap<T> {
         tail?.next = preHead
     }
 
-    func flushToCostLimit(_ costLimit: Int64) {
-
+    /// flush history item unitl under the maximumCount
+    ///
+    /// - Parameter maximumCount: the maximum of history item count
+    func flushToHistoryCountLimit(_ maximumCount: Int64) {
+        guard maximumCount > 0 else { return }
+        while totailHistoryCount > maximumCount {
+            removeHistoryTail()
+        }
     }
 
-    func flushToCountLimit(_ countLimit: Int64) {
-
+    /// flush item unitl under the maximumCost
+    ///
+    /// - Parameter maximumCost: the maximum of item cost
+    func flushToCostLimit(_ maximumCost: Int64) {
+        guard maximumCost > 0 else { return }
+        while totailCost > maximumCost {
+            removeTail()
+        }
     }
 
-    func adjustForLimit() {
-        guard needAdjust else { return }
-        popTail()
-        adjustForLimit()
+    /// flush item until under the maximumCount
+    ///
+    /// - Parameter maximumCount: the maximum of item count
+    func flushToCountLimit(_ maximumCount: Int64) {
+        guard maximumCount > 0 else { return }
+        while totailCount > maximumCount {
+            removeTail()
+        }
     }
 }
